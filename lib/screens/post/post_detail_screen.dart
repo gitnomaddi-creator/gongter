@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gongter/models/post.dart';
 import 'package:gongter/models/comment.dart';
 import 'package:gongter/services/supabase_service.dart';
@@ -83,6 +84,33 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } catch (_) {}
   }
 
+  Future<void> _confirmDeletePost() async {
+    final nav = Navigator.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('삭제 확인'),
+        content: const Text('이 글을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제',
+                style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await SupabaseService.deletePost(_post!.id);
+      if (!mounted) return;
+      nav.pop();
+    }
+  }
+
   void _showReportDialog() {
     showDialog(
       context: context,
@@ -135,11 +163,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 const PopupMenuItem(value: 'delete', child: Text('삭제')),
               ],
               onSelected: (value) async {
-                if (value == 'delete') {
-                  final nav = Navigator.of(context);
-                  await SupabaseService.deletePost(_post!.id);
-                  if (!mounted) return;
-                  nav.pop();
+                if (value == 'edit') {
+                  final result = await context.push<bool>('/edit/${_post!.id}');
+                  if (result == true) _loadPost();
+                } else if (value == 'delete') {
+                  _confirmDeletePost();
                 }
               },
             )
@@ -356,8 +384,43 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  Future<void> _toggleCommentLike(String commentId) async {
+    try {
+      await SupabaseService.toggleLike(
+          targetType: 'comment', targetId: commentId);
+      _loadPost();
+    } catch (_) {}
+  }
+
+  Future<void> _deleteComment(String commentId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('댓글 삭제'),
+        content: const Text('이 댓글을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('삭제', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await SupabaseService.deleteComment(commentId);
+      _loadPost();
+    }
+  }
+
   Widget _buildCommentTile(Comment comment) {
     final isDeleted = comment.isDeleted;
+    final isMyComment =
+        comment.authorId == SupabaseService.currentUserId;
     return Padding(
       padding: EdgeInsets.only(
         left: comment.parentId != null ? 32 : 0,
@@ -426,6 +489,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     minimumSize: const Size(0, 30),
                   ),
                 ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => _toggleCommentLike(comment.id),
+                  icon: const Icon(Icons.favorite_border, size: 14),
+                  label: Text('${comment.likeCount}',
+                      style: const TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 30),
+                  ),
+                ),
+                if (isMyComment) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _deleteComment(comment.id),
+                    icon: const Icon(Icons.delete_outline, size: 14),
+                    label: const Text('삭제', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 30),
+                    ),
+                  ),
+                ],
               ],
             ),
         ],

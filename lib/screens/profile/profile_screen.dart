@@ -107,13 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 16),
                     // Menu items
                     _buildMenuItem(Icons.article_outlined, '내가 쓴 글', () {
-                      // TODO
+                      context.push('/my-posts');
                     }),
                     _buildMenuItem(Icons.chat_outlined, '내가 쓴 댓글', () {
-                      // TODO
+                      context.push('/my-comments');
                     }),
                     _buildMenuItem(Icons.bookmark_outline, '북마크', () {
-                      // TODO
+                      context.push('/bookmarks');
                     }),
                     _buildMenuItem(Icons.edit_outlined, '닉네임 변경', () {
                       _showNicknameDialog();

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -6,6 +7,12 @@ class SupabaseService {
 
   static String? get currentUserId => auth.currentUser?.id;
   static bool get isLoggedIn => auth.currentUser != null;
+
+  /// Profile is considered complete when municipality_id is set
+  static Future<bool> get isProfileComplete async {
+    final profile = await getProfile();
+    return profile != null && profile['municipality_id'] != null;
+  }
 
   // Auth
   static Future<AuthResponse> signUp({
@@ -24,11 +31,15 @@ class SupabaseService {
 
   static Future<void> signOut() => auth.signOut();
 
-  static Future<void> verifyOtp({
+  static Future<AuthResponse> verifyOtp({
     required String email,
     required String token,
   }) {
-    return auth.verifyOTP(email: email, token: token, type: OtpType.email);
+    return auth.verifyOTP(email: email, token: token, type: OtpType.signup);
+  }
+
+  static Future<void> resendOtp({required String email}) {
+    return auth.resend(type: OtpType.signup, email: email);
   }
 
   // Profile
@@ -49,6 +60,108 @@ class SupabaseService {
     final updates = <String, dynamic>{};
     if (nickname != null) updates['nickname'] = nickname;
     await client.from('profiles').update(updates).eq('id', uid);
+  }
+
+  /// Complete profile setup after signup
+  static Future<void> completeProfileSetup({
+    required String municipalityId,
+    required String nickname,
+    required String verificationMethod,
+    String? verifiedEmail,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) return;
+    final updates = <String, dynamic>{
+      'municipality_id': municipalityId,
+      'nickname': nickname,
+      'verification_method': verificationMethod,
+    };
+    if (verificationMethod == 'email') {
+      updates['is_verified'] = true;
+      if (verifiedEmail != null) updates['verified_email'] = verifiedEmail;
+    }
+    await client.from('profiles').update(updates).eq('id', uid);
+  }
+
+  /// Find municipality by email domain (for auto-detection)
+  static Future<Map<String, dynamic>?> getMunicipalityByDomain(
+      String domain) async {
+    final res = await client
+        .from('municipalities')
+        .select()
+        .eq('email_domain', domain)
+        .maybeSingle();
+    return res;
+  }
+
+  /// Upload document to verification-docs bucket
+  static Future<String> uploadVerificationDoc(File file) async {
+    final uid = currentUserId!;
+    final ext = file.path.split('.').last;
+    final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
+    await client.storage.from('verification-docs').upload(path, file);
+    return client.storage.from('verification-docs').getPublicUrl(path);
+  }
+
+  /// Create document verification record
+  static Future<void> createDocumentVerification({
+    required String fileUrl,
+    required String municipalityId,
+  }) async {
+    await client.from('document_verifications').insert({
+      'user_id': currentUserId,
+      'file_url': fileUrl,
+      'municipality_id': municipalityId,
+    });
+  }
+
+  /// Upload image to post-images bucket
+  static Future<String> uploadPostImage(File file) async {
+    final uid = currentUserId!;
+    final ext = file.path.split('.').last;
+    final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
+    await client.storage.from('post-images').upload(path, file);
+    return client.storage.from('post-images').getPublicUrl(path);
+  }
+
+  // My posts / comments / bookmarks
+  static Future<List<Map<String, dynamic>>> getMyPosts({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await client
+        .from('posts')
+        .select('*, municipalities(name)')
+        .eq('author_id', currentUserId!)
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
+    return List<Map<String, dynamic>>.from(res);
+  }
+
+  static Future<List<Map<String, dynamic>>> getMyComments({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await client
+        .from('comments')
+        .select('*, posts(id, title)')
+        .eq('author_id', currentUserId!)
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
+    return List<Map<String, dynamic>>.from(res);
+  }
+
+  static Future<List<Map<String, dynamic>>> getMyBookmarks({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await client
+        .from('bookmarks')
+        .select('*, posts(*, municipalities(name))')
+        .eq('user_id', currentUserId!)
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
+    return List<Map<String, dynamic>>.from(res);
   }
 
   // Posts

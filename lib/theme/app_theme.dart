@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Light
-  static const primary = Color(0xFF2E7D32);
-  static const secondary = Color(0xFF81C784);
-  static const surface = Color(0xFFF5F9F5);
-  static const accent = Color(0xFFFFC107);
+  // Light - Coral/Peach theme
+  static const primary = Color(0xFFE8836B);
+  static const secondary = Color(0xFFF2A896);
+  static const surface = Color(0xFFFFF8F5);
+  static const accent = Color(0xFFD4604A);
   static const error = Color(0xFFD32F2F);
-  static const textPrimary = Color(0xFF212121);
+  static const textPrimary = Color(0xFF2D2D2D);
   static const textSecondary = Color(0xFF757575);
 
   // Dark
-  static const primaryDark = Color(0xFF66BB6A);
+  static const primaryDark = Color(0xFFF2A896);
   static const surfaceDark = Color(0xFF121212);
 }
 

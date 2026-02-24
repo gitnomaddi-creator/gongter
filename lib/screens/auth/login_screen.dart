@@ -55,7 +55,10 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 60),
               // Logo
-              Icon(Icons.park, size: 80, color: AppColors.primary),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset('assets/icons/app_icon.png', width: 80, height: 80),
+              ),
               const SizedBox(height: 16),
               Text(
                 '공터',

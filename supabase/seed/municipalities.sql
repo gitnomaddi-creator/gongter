@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 공터 (Gongter) - 지자체 시드 데이터
--- 총 243개: 광역 17 + 기초 226 (세종시 단층제로 기초 없음)
+-- 총 245개: 광역 17 + 기초 228 (세종시 단층제로 기초 없음)
 -- 행정코드: 법정동코드(행정안전부) 기반
 -- 이메일 도메인: 행정안전부 지자체 누리집 기반 (-- unverified 표시된 항목 확인 필요)
 -- =============================================================================
@@ -347,5 +347,5 @@ INSERT INTO municipalities (name, full_name, admin_code, level, parent_id, email
 -- 검증 쿼리 (배포 후 실행)
 -- =============================================================================
 -- SELECT COUNT(*) FROM municipalities WHERE level = 1;  -- 17
--- SELECT COUNT(*) FROM municipalities WHERE level = 2;  -- 226
--- SELECT COUNT(*) FROM municipalities;                   -- 243
+-- SELECT COUNT(*) FROM municipalities WHERE level = 2;  -- 228
+-- SELECT COUNT(*) FROM municipalities;                   -- 245

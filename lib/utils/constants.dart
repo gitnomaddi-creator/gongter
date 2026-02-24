@@ -1,7 +1,8 @@
 class AppConstants {
-  // Supabase - TODO: Replace with actual values after project creation
-  static const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
-  static const supabaseAnonKey = 'YOUR_ANON_KEY';
+  // Supabase
+  static const supabaseUrl = 'https://lvqgmcrwdkmcgqkwkdlq.supabase.co';
+  static const supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2cWdtY3J3ZGttY2dxa3drZGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5Mjk3MzAsImV4cCI6MjA4NzUwNTczMH0.sypanV0Lp5aDE9zvoClGxasRxyxlR1V9JPhWyxNbnKw';
 
   // Limits
   static const maxTitleLength = 50;

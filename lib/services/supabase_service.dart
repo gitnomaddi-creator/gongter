@@ -8,10 +8,18 @@ class SupabaseService {
   static String? get currentUserId => auth.currentUser?.id;
   static bool get isLoggedIn => auth.currentUser != null;
 
-  /// Profile is considered complete when municipality_id is set
-  static Future<bool> get isProfileComplete async {
+  /// Cached profile completion status (synced at startup & after profile setup)
+  static bool _profileComplete = false;
+  static bool get profileComplete => _profileComplete;
+
+  /// Check and cache profile completion. Call at startup.
+  static Future<void> checkProfileComplete() async {
+    if (!isLoggedIn) {
+      _profileComplete = false;
+      return;
+    }
     final profile = await getProfile();
-    return profile != null && profile['municipality_id'] != null;
+    _profileComplete = profile != null && profile['municipality_id'] != null;
   }
 
   // Auth
@@ -81,6 +89,7 @@ class SupabaseService {
       if (verifiedEmail != null) updates['verified_email'] = verifiedEmail;
     }
     await client.from('profiles').update(updates).eq('id', uid);
+    _profileComplete = true;
   }
 
   /// Find municipality by email domain (for auto-detection)
@@ -94,9 +103,23 @@ class SupabaseService {
     return res;
   }
 
+  /// Get list of blocked user IDs
+  static Future<List<String>> getBlockedUserIds() async {
+    final uid = currentUserId;
+    if (uid == null) return [];
+    final res = await client
+        .from('blocks')
+        .select('blocked_id')
+        .eq('blocker_id', uid);
+    return List<Map<String, dynamic>>.from(res)
+        .map((e) => e['blocked_id'] as String)
+        .toList();
+  }
+
   /// Upload document to verification-docs bucket
   static Future<String> uploadVerificationDoc(File file) async {
-    final uid = currentUserId!;
+    final uid = currentUserId;
+    if (uid == null) throw Exception('Not logged in');
     final ext = file.path.split('.').last;
     final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
     await client.storage.from('verification-docs').upload(path, file);
@@ -117,7 +140,8 @@ class SupabaseService {
 
   /// Upload image to post-images bucket
   static Future<String> uploadPostImage(File file) async {
-    final uid = currentUserId!;
+    final uid = currentUserId;
+    if (uid == null) throw Exception('Not logged in');
     final ext = file.path.split('.').last;
     final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
     await client.storage.from('post-images').upload(path, file);
@@ -132,7 +156,7 @@ class SupabaseService {
     final res = await client
         .from('posts')
         .select('*, municipalities(name)')
-        .eq('author_id', currentUserId!)
+        .eq('author_id', currentUserId ?? '')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(res);
@@ -145,7 +169,7 @@ class SupabaseService {
     final res = await client
         .from('comments')
         .select('*, posts(id, title)')
-        .eq('author_id', currentUserId!)
+        .eq('author_id', currentUserId ?? '')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(res);
@@ -158,7 +182,7 @@ class SupabaseService {
     final res = await client
         .from('bookmarks')
         .select('*, posts(*, municipalities(name))')
-        .eq('user_id', currentUserId!)
+        .eq('user_id', currentUserId ?? '')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(res);
@@ -212,14 +236,17 @@ class SupabaseService {
   }
 
   static Future<Map<String, dynamic>?> getPost(String postId) async {
-    // Increment view count via RPC
-    await client.rpc('view_post', params: {'p_post_id': postId});
     final res = await client
         .from('posts')
         .select('*, municipalities(name)')
         .eq('id', postId)
         .maybeSingle();
     return res;
+  }
+
+  /// Increment view count. Call once on initial page load only.
+  static Future<void> incrementViewCount(String postId) async {
+    await client.rpc('view_post', params: {'p_post_id': postId});
   }
 
   static Future<Map<String, dynamic>> createPost({
@@ -295,7 +322,7 @@ class SupabaseService {
     final existing = await client
         .from('likes')
         .select('id')
-        .eq('user_id', currentUserId!)
+        .eq('user_id', currentUserId ?? '')
         .eq('target_type', targetType)
         .eq('target_id', targetId)
         .maybeSingle();
@@ -315,7 +342,7 @@ class SupabaseService {
     final existing = await client
         .from('bookmarks')
         .select('id')
-        .eq('user_id', currentUserId!)
+        .eq('user_id', currentUserId ?? '')
         .eq('post_id', postId)
         .maybeSingle();
     if (existing != null) {
@@ -356,7 +383,7 @@ class SupabaseService {
     await client
         .from('blocks')
         .delete()
-        .eq('blocker_id', currentUserId!)
+        .eq('blocker_id', currentUserId ?? '')
         .eq('blocked_id', blockedId);
   }
 
@@ -396,7 +423,7 @@ class SupabaseService {
     final res = await client
         .from('notifications')
         .select()
-        .eq('user_id', currentUserId!)
+        .eq('user_id', currentUserId ?? '')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(res);

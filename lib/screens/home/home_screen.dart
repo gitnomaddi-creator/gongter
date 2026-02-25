@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen>
   List<Post> _hotPosts = [];
   bool _loadingLocal = true;
   bool _loadingHot = true;
+  List<String> _blockedUserIds = [];
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadProfile() async {
     final profile = await SupabaseService.getProfile();
+    _blockedUserIds = await SupabaseService.getBlockedUserIds();
     if (profile != null && mounted) {
       setState(() {
         _municipalityId = profile['municipality_id'] as String?;
@@ -69,7 +71,10 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (mounted) {
         setState(() {
-          _localPosts = data.map((e) => Post.fromJson(e)).toList();
+          _localPosts = data
+              .map((e) => Post.fromJson(e))
+              .where((p) => !_blockedUserIds.contains(p.authorId))
+              .toList();
           _loadingLocal = false;
         });
         // Cold start fallback
@@ -93,7 +98,10 @@ class _HomeScreenState extends State<HomeScreen>
       final data = await SupabaseService.getHotPosts();
       if (mounted) {
         setState(() {
-          _hotPosts = data.map((e) => Post.fromJson(e)).toList();
+          _hotPosts = data
+              .map((e) => Post.fromJson(e))
+              .where((p) => !_blockedUserIds.contains(p.authorId))
+              .toList();
           _loadingHot = false;
         });
       }
@@ -116,9 +124,7 @@ class _HomeScreenState extends State<HomeScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {
-              // TODO: navigate to search
-            },
+            onPressed: () => context.go('/explore'),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -223,13 +229,26 @@ class _HomeScreenState extends State<HomeScreen>
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
         selected: selected,
-        label: Text(label),
+        label: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : AppColors.textPrimary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
         onSelected: (val) {
           setState(() => _selectedTag = val ? tagValue : null);
           _loadLocalFeed();
         },
-        selectedColor: AppColors.primary.withValues(alpha: 0.15),
-        checkmarkColor: AppColors.primary,
+        selectedColor: AppColors.primary,
+        backgroundColor: Colors.white,
+        checkmarkColor: Colors.white,
+        side: BorderSide(
+          color: selected ? AppColors.primary : Colors.grey.shade300,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
     );
   }

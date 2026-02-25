@@ -86,7 +86,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           if (targetType == 'post' && targetId != null) {
                             if (context.mounted) context.push('/post/$targetId');
                           }
-                          _loadNotifications();
+                          if (mounted) await _loadNotifications();
                         },
                       );
                     },

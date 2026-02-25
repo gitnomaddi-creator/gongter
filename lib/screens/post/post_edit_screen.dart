@@ -138,10 +138,23 @@ class _PostEditScreenState extends State<PostEditScreen> {
                     children: PostTag.values.map((tag) {
                       final selected = _selectedTag == tag;
                       return ChoiceChip(
-                        label: Text(tag.label),
+                        label: Text(
+                          tag.label,
+                          style: TextStyle(
+                            color: selected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
                         selected: selected,
-                        selectedColor:
-                            AppColors.primary.withValues(alpha: 0.15),
+                        selectedColor: AppColors.primary,
+                        backgroundColor: Colors.white,
+                        checkmarkColor: Colors.white,
+                        side: BorderSide(
+                          color: selected ? AppColors.primary : Colors.grey.shade300,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                         onSelected: (val) {
                           if (val) setState(() => _selectedTag = tag);
                         },

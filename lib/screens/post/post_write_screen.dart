@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:gongter/models/post.dart';
+import 'package:gongter/services/ad_service.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
@@ -68,11 +69,24 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
         return;
       }
 
-      // Upload images
+      // Upload images (clean up on failure)
       List<String> imageUrls = [];
-      for (final img in _images) {
-        final url = await SupabaseService.uploadPostImage(img);
-        imageUrls.add(url);
+      try {
+        for (final img in _images) {
+          final url = await SupabaseService.uploadPostImage(img);
+          imageUrls.add(url);
+        }
+      } catch (e) {
+        // Clean up already uploaded images on partial failure
+        for (final url in imageUrls) {
+          try {
+            final path = Uri.parse(url).pathSegments.skip(3).join('/');
+            await SupabaseService.client.storage
+                .from('post-images')
+                .remove([path]);
+          } catch (_) {}
+        }
+        rethrow;
       }
 
       await SupabaseService.createPost(
@@ -82,6 +96,8 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
         content: content,
         imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
       );
+      // Show interstitial after post creation (non-blocking)
+      AdService.showInterstitial();
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -161,9 +177,23 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
               children: PostTag.values.map((tag) {
                 final selected = _selectedTag == tag;
                 return ChoiceChip(
-                  label: Text(tag.label),
+                  label: Text(
+                    tag.label,
+                    style: TextStyle(
+                      color: selected ? Colors.white : AppColors.textPrimary,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
                   selected: selected,
-                  selectedColor: AppColors.primary.withValues(alpha: 0.15),
+                  selectedColor: AppColors.primary,
+                  backgroundColor: Colors.white,
+                  checkmarkColor: Colors.white,
+                  side: BorderSide(
+                    color: selected ? AppColors.primary : Colors.grey.shade300,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   onSelected: (val) {
                     if (val) setState(() => _selectedTag = tag);
                   },

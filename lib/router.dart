@@ -25,6 +25,10 @@ final appRouter = GoRouter(
         loc == '/login' || loc == '/signup' || loc == '/profile-setup';
     if (!loggedIn && !isAuthRoute) return '/login';
     if (loggedIn && (loc == '/login' || loc == '/signup')) return '/';
+    // Redirect to profile setup if profile is incomplete
+    if (loggedIn && !SupabaseService.profileComplete && !isAuthRoute) {
+      return '/profile-setup';
+    }
     return null;
   },
   routes: [

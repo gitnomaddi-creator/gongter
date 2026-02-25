@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gongter/models/post.dart';
@@ -20,30 +21,60 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Post? _post;
   List<Comment> _comments = [];
   bool _loading = true;
+  bool _togglingLike = false;
+  bool _togglingBookmark = false;
   final _commentController = TextEditingController();
   String? _replyToId;
 
   @override
   void initState() {
     super.initState();
-    _loadPost();
+    _initialLoad();
   }
 
-  Future<void> _loadPost() async {
+  /// Initial load: increment view count once, then load post + comments
+  Future<void> _initialLoad() async {
     setState(() => _loading = true);
     try {
-      final postData = await SupabaseService.getPost(widget.postId);
-      final commentData = await SupabaseService.getComments(widget.postId);
-      if (mounted) {
-        setState(() {
-          _post = postData != null ? Post.fromJson(postData) : null;
-          _comments = commentData.map((e) => Comment.fromJson(e)).toList();
-          _loading = false;
-        });
-      }
+      await SupabaseService.incrementViewCount(widget.postId);
+      await _fetchPostAndComments();
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Reload post + comments without incrementing view count
+  Future<void> _loadPost() async {
+    setState(() => _loading = true);
+    try {
+      await _fetchPostAndComments();
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _fetchPostAndComments() async {
+    final postData = await SupabaseService.getPost(widget.postId);
+    final commentData = await SupabaseService.getComments(widget.postId);
+    if (mounted) {
+      setState(() {
+        _post = postData != null ? Post.fromJson(postData) : null;
+        _comments = commentData.map((e) => Comment.fromJson(e)).toList();
+        _loading = false;
+      });
+    }
+  }
+
+  /// Reload only comments (for after comment submit/delete)
+  Future<void> _loadComments() async {
+    try {
+      final commentData = await SupabaseService.getComments(widget.postId);
+      if (mounted) {
+        setState(() {
+          _comments = commentData.map((e) => Comment.fromJson(e)).toList();
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _submitComment() async {
@@ -57,7 +88,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       );
       _commentController.clear();
       setState(() => _replyToId = null);
-      _loadPost();
+      _loadComments();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -68,20 +99,27 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   Future<void> _toggleLike() async {
-    if (_post == null) return;
+    if (_post == null || _togglingLike) return;
+    setState(() => _togglingLike = true);
     try {
       await SupabaseService.toggleLike(
           targetType: 'post', targetId: _post!.id);
-      _loadPost();
+      // Reload post only (no view count increment)
+      final postData = await SupabaseService.getPost(widget.postId);
+      if (mounted && postData != null) {
+        setState(() => _post = Post.fromJson(postData));
+      }
     } catch (_) {}
+    if (mounted) setState(() => _togglingLike = false);
   }
 
   Future<void> _toggleBookmark() async {
-    if (_post == null) return;
+    if (_post == null || _togglingBookmark) return;
+    setState(() => _togglingBookmark = true);
     try {
       await SupabaseService.toggleBookmark(_post!.id);
-      _loadPost();
     } catch (_) {}
+    if (mounted) setState(() => _togglingBookmark = false);
   }
 
   Future<void> _confirmDeletePost() async {
@@ -111,7 +149,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  void _showReportDialog() {
+  void _showReportDialog({required String targetType, required String targetId}) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -125,8 +163,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   onTap: () async {
                     Navigator.pop(ctx);
                     await SupabaseService.report(
-                      targetType: 'post',
-                      targetId: _post!.id,
+                      targetType: targetType,
+                      targetId: targetId,
                       reason: e.key,
                     );
                     if (mounted) {
@@ -174,7 +212,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           else
             IconButton(
               icon: const Icon(Icons.flag_outlined),
-              onPressed: _post != null ? _showReportDialog : null,
+              onPressed: _post != null
+                  ? () => _showReportDialog(
+                      targetType: 'post', targetId: _post!.id)
+                  : null,
             ),
         ],
       ),
@@ -237,8 +278,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                   padding: const EdgeInsets.only(bottom: 8),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(url,
-                                        fit: BoxFit.cover),
+                                    child: CachedNetworkImage(
+                                      imageUrl: url,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        height: 200,
+                                        color: Colors.grey.shade200,
+                                        child: const Center(
+                                            child: CircularProgressIndicator()),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
+                                        height: 200,
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(Icons.broken_image,
+                                            color: Colors.grey),
+                                      ),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -249,13 +304,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 _buildAction(
                                   Icons.favorite_border,
                                   '${_post!.likeCount}',
-                                  _toggleLike,
+                                  _togglingLike ? null : _toggleLike,
                                 ),
                                 const SizedBox(width: 24),
                                 _buildAction(
                                   Icons.bookmark_border,
                                   '북마크',
-                                  _toggleBookmark,
+                                  _togglingBookmark ? null : _toggleBookmark,
                                 ),
                                 const Spacer(),
                                 Text(
@@ -365,7 +420,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _buildAction(IconData icon, String label, VoidCallback onTap) {
+  Widget _buildAction(IconData icon, String label, VoidCallback? onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -388,7 +443,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       await SupabaseService.toggleLike(
           targetType: 'comment', targetId: commentId);
-      _loadPost();
+      _loadComments();
     } catch (_) {}
   }
 
@@ -413,7 +468,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
     if (confirm == true) {
       await SupabaseService.deleteComment(commentId);
-      _loadPost();
+      _loadComments();
     }
   }
 
@@ -509,6 +564,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     label: const Text('삭제', style: TextStyle(fontSize: 12)),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.error,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 30),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _showReportDialog(
+                        targetType: 'comment', targetId: comment.id),
+                    icon: const Icon(Icons.flag_outlined, size: 14),
+                    label: const Text('신고', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(0, 30),
                     ),

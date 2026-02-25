@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gongter/models/municipality.dart';
+import 'package:gongter/models/post.dart';
 import 'package:gongter/services/supabase_service.dart';
+import 'package:gongter/widgets/post_card.dart';
 import 'package:gongter/theme/app_theme.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -150,13 +153,89 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 subtitle: Text(basic.fullName,
                     style: const TextStyle(fontSize: 12)),
                 onTap: () {
-                  // TODO: Navigate to municipality feed
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => _MunicipalityFeedScreen(
+                        municipalityId: basic.id,
+                        municipalityName: basic.fullName,
+                      ),
+                    ),
+                  );
                 },
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Feed screen for a specific municipality
+class _MunicipalityFeedScreen extends StatefulWidget {
+  final String municipalityId;
+  final String municipalityName;
+  const _MunicipalityFeedScreen({
+    required this.municipalityId,
+    required this.municipalityName,
+  });
+
+  @override
+  State<_MunicipalityFeedScreen> createState() =>
+      _MunicipalityFeedScreenState();
+}
+
+class _MunicipalityFeedScreenState extends State<_MunicipalityFeedScreen> {
+  List<Post> _posts = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeed();
+  }
+
+  Future<void> _loadFeed() async {
+    setState(() => _loading = true);
+    try {
+      final data = await SupabaseService.getFeed(
+        municipalityId: widget.municipalityId,
+      );
+      if (mounted) {
+        setState(() {
+          _posts = data.map((e) => Post.fromJson(e)).toList();
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.municipalityName)),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _posts.isEmpty
+              ? Center(
+                  child: Text('아직 글이 없습니다',
+                      style: TextStyle(color: Colors.grey.shade600)),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadFeed,
+                  child: ListView.builder(
+                    itemCount: _posts.length,
+                    itemBuilder: (context, index) {
+                      return PostCard(
+                        post: _posts[index],
+                        onTap: () => context.push('/post/${_posts[index].id}'),
+                      );
+                    },
+                  ),
+                ),
     );
   }
 }

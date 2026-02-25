@@ -265,8 +265,13 @@ class _SignupScreenState extends State<SignupScreen> {
   // Step 4: Complete profile setup
   Future<void> _completeSetup() async {
     final nickname = _nicknameController.text.trim();
-    if (nickname.length < 2) {
-      setState(() => _error = '닉네임은 2자 이상이어야 합니다');
+    if (nickname.length < 2 || nickname.length > 10) {
+      setState(() => _error = '닉네임은 2~10자로 입력해주세요');
+      return;
+    }
+    final nicknameRegex = RegExp(r'^[가-힣a-zA-Z0-9]+$');
+    if (!nicknameRegex.hasMatch(nickname)) {
+      setState(() => _error = '닉네임은 한글, 영문, 숫자만 사용 가능합니다');
       return;
     }
 

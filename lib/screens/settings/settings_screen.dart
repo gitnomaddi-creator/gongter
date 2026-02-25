@@ -31,16 +31,12 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.description),
             title: const Text('이용약관'),
-            onTap: () {
-              // TODO: navigate to terms
-            },
+            onTap: () => _openUrl('https://gitnomaddi-creator.github.io/gongter/terms.html'),
           ),
           ListTile(
             leading: const Icon(Icons.privacy_tip),
             title: const Text('개인정보처리방침'),
-            onTap: () {
-              // TODO: navigate to privacy policy
-            },
+            onTap: () => _openUrl('https://gitnomaddi-creator.github.io/gongter/privacy.html'),
           ),
           const Divider(),
           const _SectionHeader('문의'),
@@ -83,6 +79,13 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   void _showLegalNotice(BuildContext context) {

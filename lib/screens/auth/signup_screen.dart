@@ -85,8 +85,8 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    if (!email.endsWith('.go.kr')) {
-      setState(() => _error = '*.go.kr 이메일만 사용 가능합니다');
+    if (!email.endsWith('.go.kr') && !email.endsWith('.kr')) {
+      setState(() => _error = '공무원 이메일(.kr)만 사용 가능합니다');
       return;
     }
 
@@ -282,7 +282,7 @@ class _SignupScreenState extends State<SignupScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            '공무원 이메일(*.go.kr)을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
+            '공무원 이메일(예: name@korea.kr)을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 24),

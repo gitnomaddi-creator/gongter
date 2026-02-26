@@ -82,6 +82,7 @@ enum PostTag {
   free('free', '자유'),
   question('question', '질문'),
   info('info', '정보'),
+  confession('confession', '고백'),
   humor('humor', '유머');
 
   final String value;

@@ -167,9 +167,8 @@ class _HomeScreenState extends State<HomeScreen>
     return Column(
       children: [
         // Tag filter chips
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
               _buildTagChip(null, '전체'),
@@ -225,29 +224,38 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildTagChip(String? tagValue, String label) {
     final selected = _selectedTag == tagValue;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        selected: selected,
-        label: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : AppColors.textPrimary,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: FilterChip(
+          selected: selected,
+          showCheckmark: false,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          labelPadding: EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+          label: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: selected ? Colors.white : AppColors.textPrimary,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
           ),
-        ),
-        onSelected: (val) {
-          setState(() => _selectedTag = val ? tagValue : null);
-          _loadLocalFeed();
-        },
-        selectedColor: AppColors.primary,
-        backgroundColor: Colors.white,
-        checkmarkColor: Colors.white,
-        side: BorderSide(
-          color: selected ? AppColors.primary : Colors.grey.shade300,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          onSelected: (val) {
+            setState(() => _selectedTag = val ? tagValue : null);
+            _loadLocalFeed();
+          },
+          selectedColor: AppColors.primary,
+          backgroundColor: Colors.white,
+          checkmarkColor: Colors.white,
+          side: BorderSide(
+            color: selected ? AppColors.primary : Colors.grey.shade300,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
       ),
     );

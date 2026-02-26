@@ -62,6 +62,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
       final municipalityId = profile?['municipality_id'] as String?;
       if (municipalityId == null) {
         if (mounted) {
+          setState(() => _submitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('소속 지자체가 설정되지 않았습니다')),
           );
@@ -98,7 +99,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
       );
       // Show interstitial after post creation (non-blocking)
       AdService.showInterstitial();
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

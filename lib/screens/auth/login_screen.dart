@@ -29,12 +29,68 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await SupabaseService.signIn(email: email, password: password);
+      await SupabaseService.checkProfileComplete();
       if (mounted) context.go('/');
     } catch (e) {
       setState(() => _error = '로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _showForgotPassword() async {
+    final emailController = TextEditingController(text: _emailController.text);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('비밀번호 재설정'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('가입한 이메일을 입력하면\n비밀번호 재설정 링크를 보내드립니다.',
+                style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: '이메일',
+                hintText: 'example@korea.kr',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('발송'),
+          ),
+        ],
+      ),
+    );
+    if (result == true) {
+      final email = emailController.text.trim();
+      if (email.isEmpty) return;
+      try {
+        await SupabaseService.resetPassword(email: email);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('비밀번호 재설정 링크를 발송했습니다. 이메일을 확인해주세요.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('발송에 실패했습니다. 잠시 후 다시 시도해주세요.')),
+          );
+        }
+      }
+    }
+    emailController.dispose();
   }
 
   @override
@@ -83,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
                   labelText: '이메일',
-                  hintText: 'example@city.go.kr',
+                  hintText: 'example@korea.kr',
                   prefixIcon: Icon(Icons.email_outlined),
                 ),
               ),
@@ -115,7 +171,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     : const Text('로그인', style: TextStyle(fontSize: 16)),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              // Forgot password
+              TextButton(
+                onPressed: _showForgotPassword,
+                child: const Text('비밀번호를 잊으셨나요?',
+                    style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              const SizedBox(height: 8),
               // Signup link
               TextButton(
                 onPressed: () => context.push('/signup'),

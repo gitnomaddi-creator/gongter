@@ -118,8 +118,42 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() => _togglingBookmark = true);
     try {
       await SupabaseService.toggleBookmark(_post!.id);
+      // Reload post to get updated bookmark state
+      final postData = await SupabaseService.getPost(widget.postId);
+      if (mounted && postData != null) {
+        setState(() => _post = Post.fromJson(postData));
+      }
     } catch (_) {}
     if (mounted) setState(() => _togglingBookmark = false);
+  }
+
+  Future<void> _blockUser(String userId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('사용자 차단'),
+        content: const Text('이 사용자를 차단하시겠습니까?\n차단하면 이 사용자의 글과 댓글이 보이지 않습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('차단', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await SupabaseService.blockUser(userId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('사용자를 차단했습니다')),
+        );
+        Navigator.pop(context);
+      }
+    }
   }
 
   Future<void> _confirmDeletePost() async {
@@ -209,13 +243,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 }
               },
             )
-          else
-            IconButton(
-              icon: const Icon(Icons.flag_outlined),
-              onPressed: _post != null
-                  ? () => _showReportDialog(
-                      targetType: 'post', targetId: _post!.id)
-                  : null,
+          else if (_post != null)
+            PopupMenuButton(
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'report', child: Text('신고')),
+                if (_post!.authorId != null)
+                  const PopupMenuItem(
+                    value: 'block',
+                    child: Text('이 사용자 차단',
+                        style: TextStyle(color: AppColors.error)),
+                  ),
+              ],
+              onSelected: (value) {
+                if (value == 'report') {
+                  _showReportDialog(
+                      targetType: 'post', targetId: _post!.id);
+                } else if (value == 'block' && _post!.authorId != null) {
+                  _blockUser(_post!.authorId!);
+                }
+              },
             ),
         ],
       ),
@@ -302,15 +348,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             Row(
                               children: [
                                 _buildAction(
-                                  Icons.favorite_border,
+                                  _post!.isLiked == true
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
                                   '${_post!.likeCount}',
                                   _togglingLike ? null : _toggleLike,
+                                  color: _post!.isLiked == true
+                                      ? Colors.red
+                                      : AppColors.textSecondary,
                                 ),
                                 const SizedBox(width: 24),
                                 _buildAction(
-                                  Icons.bookmark_border,
+                                  _post!.isBookmarked == true
+                                      ? Icons.bookmark
+                                      : Icons.bookmark_border,
                                   '북마크',
                                   _togglingBookmark ? null : _toggleBookmark,
+                                  color: _post!.isBookmarked == true
+                                      ? AppColors.primary
+                                      : AppColors.textSecondary,
                                 ),
                                 const Spacer(),
                                 Text(
@@ -420,7 +476,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _buildAction(IconData icon, String label, VoidCallback? onTap) {
+  Widget _buildAction(IconData icon, String label, VoidCallback? onTap,
+      {Color? color}) {
+    final c = color ?? AppColors.textSecondary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -428,11 +486,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         padding: const EdgeInsets.all(8),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: AppColors.textSecondary),
+            Icon(icon, size: 20, color: c),
             const SizedBox(width: 4),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 14, color: AppColors.textSecondary)),
+            Text(label, style: TextStyle(fontSize: 14, color: c)),
           ],
         ),
       ),
@@ -472,10 +528,29 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  /// Get anonymous number for a comment author within this post
+  String _getAnonLabel(Comment comment) {
+    if (comment.isAuthor) return '글쓴이';
+    if (comment.authorId == SupabaseService.currentUserId) return '나';
+    // Build unique author list in order of first appearance
+    final authorOrder = <String>[];
+    for (final c in _comments) {
+      if (c.authorId != null &&
+          c.authorId != _post?.authorId &&
+          c.authorId != SupabaseService.currentUserId &&
+          !authorOrder.contains(c.authorId)) {
+        authorOrder.add(c.authorId!);
+      }
+    }
+    final idx = authorOrder.indexOf(comment.authorId ?? '');
+    return '익명${idx + 1}';
+  }
+
   Widget _buildCommentTile(Comment comment) {
     final isDeleted = comment.isDeleted;
     final isMyComment =
         comment.authorId == SupabaseService.currentUserId;
+    final anonLabel = _getAnonLabel(comment);
     return Padding(
       padding: EdgeInsets.only(
         left: comment.parentId != null ? 32 : 0,
@@ -487,11 +562,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           Row(
             children: [
               Text(
-                '익명',
+                anonLabel,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
-                  color: isDeleted ? AppColors.textSecondary : null,
+                  color: comment.isAuthor
+                      ? AppColors.primary
+                      : isDeleted
+                          ? AppColors.textSecondary
+                          : null,
                 ),
               ),
               if (comment.isAuthor) ...[
@@ -581,6 +660,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       minimumSize: const Size(0, 30),
                     ),
                   ),
+                  if (comment.authorId != null) ...[
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _blockUser(comment.authorId!),
+                      icon: const Icon(Icons.block, size: 14),
+                      label: const Text('차단', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 30),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),

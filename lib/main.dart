@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:gongter/theme/app_theme.dart';
@@ -26,7 +25,7 @@ void main() async {
   // Register Korean locale for timeago
   timeago.setLocaleMessages('ko', timeago.KoMessages());
 
-  runApp(const ProviderScope(child: GongterApp()));
+  runApp(const GongterApp());
 }
 
 /// Request ATT permission (iOS only, after first frame)

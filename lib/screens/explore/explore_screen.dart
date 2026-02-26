@@ -13,17 +13,32 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
+class _ExploreScreenState extends State<ExploreScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   List<Municipality> _metros = [];
   List<Municipality> _basics = [];
   String? _selectedMetroId;
   bool _loading = true;
-  final _searchController = TextEditingController();
+  final _muniSearchController = TextEditingController();
+
+  // Post search
+  final _postSearchController = TextEditingController();
+  List<Post> _searchResults = [];
+  bool _searching = false;
+  bool _hasSearched = false;
+  List<String> _blockedUserIds = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadMetros();
+    _loadBlockedUsers();
+  }
+
+  Future<void> _loadBlockedUsers() async {
+    _blockedUserIds = await SupabaseService.getBlockedUserIds();
   }
 
   Future<void> _loadMetros() async {
@@ -59,54 +74,163 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
+  Future<void> _searchPosts() async {
+    final query = _postSearchController.text.trim();
+    if (query.isEmpty) return;
+    setState(() {
+      _searching = true;
+      _hasSearched = true;
+    });
+    try {
+      final data = await SupabaseService.searchPosts(query: query);
+      if (mounted) {
+        setState(() {
+          _searchResults = data
+              .map((e) => Post.fromJson(e))
+              .where((p) => !_blockedUserIds.contains(p.authorId))
+              .toList();
+          _searching = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
   @override
   void dispose() {
-    _searchController.dispose();
+    _tabController.dispose();
+    _muniSearchController.dispose();
+    _postSearchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('탐색')),
-      body: Column(
+      appBar: AppBar(
+        title: const Text('탐색'),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: '지자체'),
+            Tab(text: '게시글 검색'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '지자체 검색',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          // Metro list or basics list
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _selectedMetroId == null
-                    ? _buildMetroList()
-                    : _buildBasicList(),
-          ),
+          _buildMunicipalityTab(),
+          _buildPostSearchTab(),
         ],
       ),
     );
   }
 
+  Widget _buildPostSearchTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _postSearchController,
+            decoration: InputDecoration(
+              hintText: '제목 또는 내용으로 검색',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _postSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _postSearchController.clear();
+                        setState(() {
+                          _searchResults = [];
+                          _hasSearched = false;
+                        });
+                      },
+                    )
+                  : null,
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _searchPosts(),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        Expanded(
+          child: _searching
+              ? const Center(child: CircularProgressIndicator())
+              : !_hasSearched
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search, size: 48, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
+                          Text('검색어를 입력해주세요',
+                              style: TextStyle(color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    )
+                  : _searchResults.isEmpty
+                      ? Center(
+                          child: Text('검색 결과가 없습니다',
+                              style: TextStyle(color: Colors.grey.shade600)),
+                        )
+                      : ListView.builder(
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            return PostCard(
+                              post: _searchResults[index],
+                              showMunicipality: true,
+                              onTap: () => context.push(
+                                  '/post/${_searchResults[index].id}'),
+                            );
+                          },
+                        ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMunicipalityTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _muniSearchController,
+            decoration: InputDecoration(
+              hintText: '지자체 검색',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _muniSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _muniSearchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _selectedMetroId == null
+                  ? _buildMetroList()
+                  : _buildBasicList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMetroList() {
-    final query = _searchController.text.trim().toLowerCase();
+    final query = _muniSearchController.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? _metros
         : _metros.where((m) => m.fullName.toLowerCase().contains(query)).toList();
@@ -125,7 +249,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Widget _buildBasicList() {
-    final query = _searchController.text.trim().toLowerCase();
+    final query = _muniSearchController.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? _basics
         : _basics.where((m) => m.fullName.toLowerCase().contains(query)).toList();
@@ -189,6 +313,7 @@ class _MunicipalityFeedScreen extends StatefulWidget {
 class _MunicipalityFeedScreenState extends State<_MunicipalityFeedScreen> {
   List<Post> _posts = [];
   bool _loading = true;
+  List<String> _blockedUserIds = [];
 
   @override
   void initState() {
@@ -199,12 +324,16 @@ class _MunicipalityFeedScreenState extends State<_MunicipalityFeedScreen> {
   Future<void> _loadFeed() async {
     setState(() => _loading = true);
     try {
+      _blockedUserIds = await SupabaseService.getBlockedUserIds();
       final data = await SupabaseService.getFeed(
         municipalityId: widget.municipalityId,
       );
       if (mounted) {
         setState(() {
-          _posts = data.map((e) => Post.fromJson(e)).toList();
+          _posts = data
+              .map((e) => Post.fromJson(e))
+              .where((p) => !_blockedUserIds.contains(p.authorId))
+              .toList();
           _loading = false;
         });
       }

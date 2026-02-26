@@ -52,6 +52,17 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const Divider(),
+          const _SectionHeader('사용자 관리'),
+          ListTile(
+            leading: const Icon(Icons.block),
+            title: const Text('차단 목록'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const _BlockedUsersScreen()),
+            ),
+          ),
+          const Divider(),
           const _SectionHeader('계정'),
           ListTile(
             leading: const Icon(Icons.logout),
@@ -133,6 +144,79 @@ class SettingsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BlockedUsersScreen extends StatefulWidget {
+  const _BlockedUsersScreen();
+
+  @override
+  State<_BlockedUsersScreen> createState() => _BlockedUsersScreenState();
+}
+
+class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
+  List<Map<String, dynamic>> _blocked = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final data = await SupabaseService.getBlockedUsers();
+      if (mounted) setState(() { _blocked = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _unblock(String blockedId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('차단 해제'),
+        content: const Text('이 사용자의 차단을 해제하시겠습니까?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('해제')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await SupabaseService.unblockUser(blockedId);
+      _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('차단 목록')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _blocked.isEmpty
+              ? const Center(child: Text('차단한 사용자가 없습니다'))
+              : ListView.builder(
+                  itemCount: _blocked.length,
+                  itemBuilder: (context, index) {
+                    final item = _blocked[index];
+                    final nickname = (item['profiles'] as Map?)?['nickname'] ?? '알 수 없음';
+                    return ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: Text(nickname as String),
+                      trailing: TextButton(
+                        onPressed: () => _unblock(item['blocked_id'] as String),
+                        child: const Text('차단 해제',
+                            style: TextStyle(color: AppColors.error)),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

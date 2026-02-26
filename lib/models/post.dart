@@ -61,7 +61,7 @@ class Post {
       isEdited: json['updated_at'] != json['created_at'],
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
-      municipalityName: json['municipality_name'] as String?,
+      municipalityName: (json['municipalities'] as Map<String, dynamic>?)?['name'] as String? ?? json['municipality_name'] as String?,
       isLiked: json['is_liked'] as bool?,
       isBookmarked: json['is_bookmarked'] as bool?,
     );

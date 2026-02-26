@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:gongter/models/municipality.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -15,9 +14,8 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  // 0: method, 1: email/password, 2: OTP, 3: document upload, 4: profile setup
+  // 0: email/password + terms, 1: OTP, 2: profile setup
   int _step = 0;
-  String _method = ''; // 'email' or 'document'
 
   // Auth fields
   final _emailController = TextEditingController();
@@ -26,15 +24,15 @@ class _SignupScreenState extends State<SignupScreen> {
   final _otpController = TextEditingController();
   final _nicknameController = TextEditingController();
 
-  // Document
-  File? _docFile;
-
   // Municipality selection
   List<Municipality> _metros = [];
   List<Municipality> _basics = [];
   Municipality? _selectedMetro;
   Municipality? _selectedMunicipality;
   Municipality? _autoDetectedMunicipality;
+
+  // Terms agreement
+  bool _agreedToTerms = false;
 
   bool _loading = false;
   String? _error;
@@ -56,12 +54,8 @@ class _SignupScreenState extends State<SignupScreen> {
       case 0:
         return '회원가입';
       case 1:
-        return _method == 'email' ? '이메일 인증' : '계정 생성';
-      case 2:
         return '인증코드 입력';
-      case 3:
-        return '재직증명서 제출';
-      case 4:
+      case 2:
         return '프로필 설정';
       default:
         return '회원가입';
@@ -72,21 +66,15 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _error = null);
     if (_step == 0) {
       context.pop();
-    } else if (_step == 4 && _method == 'document') {
-      setState(() => _step = 3);
-    } else if (_step == 4 && _method == 'email') {
+    } else if (_step == 2) {
       // Can't go back from profile setup after OTP verified
       context.pop();
-    } else if (_step == 3) {
-      setState(() => _step = 2);
-    } else if (_step == 2) {
-      setState(() => _step = 1);
     } else {
-      setState(() => _step = 0);
+      setState(() => _step = _step - 1);
     }
   }
 
-  // Step 1: Sign up with email + password
+  // Step 0: Sign up with email + password
   Future<void> _submitSignup() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -97,7 +85,7 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    if (_method == 'email' && !email.endsWith('.go.kr')) {
+    if (!email.endsWith('.go.kr')) {
       setState(() => _error = '*.go.kr 이메일만 사용 가능합니다');
       return;
     }
@@ -112,6 +100,11 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
+    if (!_agreedToTerms) {
+      setState(() => _error = '이용약관 및 개인정보처리방침에 동의해주세요');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -120,16 +113,14 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       await SupabaseService.signUp(email: email, password: password);
 
-      // For email method, try to auto-detect municipality
-      if (_method == 'email') {
-        final domain = email.split('@').last;
-        final muni = await SupabaseService.getMunicipalityByDomain(domain);
-        if (muni != null) {
-          _autoDetectedMunicipality = Municipality.fromJson(muni);
-        }
+      // Try to auto-detect municipality from email domain
+      final domain = email.split('@').last;
+      final muni = await SupabaseService.getMunicipalityByDomain(domain);
+      if (muni != null) {
+        _autoDetectedMunicipality = Municipality.fromJson(muni);
       }
 
-      if (mounted) setState(() => _step = 2);
+      if (mounted) setState(() => _step = 1);
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('already registered')) {
@@ -142,7 +133,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Step 2: Verify OTP
+  // Step 1: Verify OTP
   Future<void> _verifyOtp() async {
     final code = _otpController.text.trim();
     if (code.isEmpty || code.length != 6) {
@@ -162,13 +153,8 @@ class _SignupScreenState extends State<SignupScreen> {
       );
 
       if (mounted) {
-        if (_method == 'document') {
-          setState(() => _step = 3);
-        } else {
-          // Email method: go to profile setup
-          await _loadMetros();
-          setState(() => _step = 4);
-        }
+        await _loadMetros();
+        setState(() => _step = 2);
       }
     } catch (e) {
       setState(() => _error = '인증코드가 올바르지 않습니다');
@@ -194,52 +180,6 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Step 3: Upload document
-  Future<void> _pickDocument() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.camera,
-      maxWidth: 1920,
-      imageQuality: 85,
-    );
-    if (picked != null) {
-      setState(() => _docFile = File(picked.path));
-    }
-  }
-
-  Future<void> _pickFromGallery() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1920,
-      imageQuality: 85,
-    );
-    if (picked != null) {
-      setState(() => _docFile = File(picked.path));
-    }
-  }
-
-  Future<void> _submitDocument() async {
-    if (_docFile == null) {
-      setState(() => _error = '재직증명서 사진을 선택해주세요');
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await _loadMetros();
-      if (mounted) setState(() => _step = 4);
-    } catch (e) {
-      setState(() => _error = '오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   // Municipality loading
   Future<void> _loadMetros() async {
     final data = await SupabaseService.getMunicipalities(level: 1);
@@ -262,7 +202,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Step 4: Complete profile setup
+  // Step 2: Complete profile setup
   Future<void> _completeSetup() async {
     final nickname = _nicknameController.text.trim();
     if (nickname.length < 2 || nickname.length > 10) {
@@ -291,21 +231,11 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      // Upload document if document method
-      if (_method == 'document' && _docFile != null) {
-        final url = await SupabaseService.uploadVerificationDoc(_docFile!);
-        await SupabaseService.createDocumentVerification(
-          fileUrl: url,
-          municipalityId: finalMunicipalityId,
-        );
-      }
-
       await SupabaseService.completeProfileSetup(
         municipalityId: finalMunicipalityId,
         nickname: nickname,
-        verificationMethod: _method,
-        verifiedEmail:
-            _method == 'email' ? _emailController.text.trim() : null,
+        verificationMethod: 'email',
+        verifiedEmail: _emailController.text.trim(),
       );
 
       if (mounted) context.go('/');
@@ -313,6 +243,13 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _error = '프로필 설정에 실패했습니다. 다시 시도해주세요.');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -328,141 +265,34 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
       body: SafeArea(
         child: switch (_step) {
-          0 => _buildMethodSelection(),
-          1 => _buildEmailPassword(),
-          2 => _buildOtpVerification(),
-          3 => _buildDocumentUpload(),
-          4 => _buildProfileSetup(),
+          0 => _buildEmailPassword(),
+          1 => _buildOtpVerification(),
+          2 => _buildProfileSetup(),
           _ => const SizedBox.shrink(),
         },
       ),
     );
   }
 
-  // ─── Step 0: Method Selection ───
-  Widget _buildMethodSelection() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 24),
-          Text(
-            '인증 방법을 선택하세요',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '공무원 재직 확인을 위해 인증이 필요합니다',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-            ),
-            child: const Text(
-              AppConstants.legalNotice,
-              style: TextStyle(fontSize: 13, height: 1.5),
-            ),
-          ),
-          const SizedBox(height: 32),
-          _buildOptionCard(
-            icon: Icons.email,
-            title: '공무원 이메일 인증',
-            subtitle: '*.go.kr 이메일로 인증코드 발송 (즉시 인증)',
-            onTap: () => setState(() {
-              _method = 'email';
-              _step = 1;
-            }),
-          ),
-          const SizedBox(height: 16),
-          _buildOptionCard(
-            icon: Icons.description,
-            title: '재직증명서 인증',
-            subtitle: '재직증명서 사진 촬영/업로드 (1~2일 내 승인)',
-            onTap: () => setState(() {
-              _method = 'document';
-              _step = 1;
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOptionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Icon(icon, size: 40, color: AppColors.primary),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            fontSize: 13, color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Step 1: Email + Password ───
+  // ─── Step 0: Email + Password + Terms ───
   Widget _buildEmailPassword() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_method == 'email')
-            const Text(
-              '공무원 이메일(*.go.kr)을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            )
-          else
-            const Text(
-              '로그인에 사용할 이메일과 비밀번호를 입력해주세요.\n이메일로 인증코드가 발송됩니다.',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            ),
+          const Text(
+            '공무원 이메일(*.go.kr)을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 24),
           TextField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: '이메일',
-              hintText:
-                  _method == 'email' ? 'name@city.go.kr' : 'example@email.com',
-              prefixIcon: const Icon(Icons.email_outlined),
+              hintText: 'name@korea.kr',
+              prefixIcon: Icon(Icons.email_outlined),
             ),
           ),
           const SizedBox(height: 16),
@@ -497,6 +327,120 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 20),
+          // Legal notice
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border:
+                  Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 18, color: AppColors.accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      '공무원법 주의사항',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '• 직무상 비밀 누설 금지 (제60조)\n'
+                  '• 품위유지 의무 (제63조)\n'
+                  '• 정치 중립 의무 (제65조)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.6,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '본 앱의 게시글은 개인 의견이며,\n법적 책임은 작성자 본인에게 있습니다.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Terms agreement
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: _agreedToTerms,
+                  onChanged: (val) =>
+                      setState(() => _agreedToTerms = val ?? false),
+                  activeColor: AppColors.primary,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () =>
+                      setState(() => _agreedToTerms = !_agreedToTerms),
+                  child: const Text(
+                    '이용약관 및 개인정보처리방침에 동의합니다',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const SizedBox(width: 32),
+              GestureDetector(
+                onTap: () => _openUrl(
+                    'https://gitnomaddi-creator.github.io/gongter/terms.html'),
+                child: const Text(
+                  '이용약관',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.primary,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => _openUrl(
+                    'https://gitnomaddi-creator.github.io/gongter/privacy.html'),
+                child: const Text(
+                  '개인정보처리방침',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.primary,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: AppColors.error)),
@@ -518,7 +462,7 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // ─── Step 2: OTP Verification ───
+  // ─── Step 1: OTP Verification ───
   Widget _buildOtpVerification() {
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -578,90 +522,7 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // ─── Step 3: Document Upload ───
-  Widget _buildDocumentUpload() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            '재직증명서를 촬영하거나 갤러리에서 선택해주세요.\n개인정보(주민번호 등)가 가려진 상태로 제출해주세요.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          if (_docFile != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(_docFile!,
-                  height: 300, fit: BoxFit.cover, width: double.infinity),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () => setState(() => _docFile = null),
-              icon: const Icon(Icons.close),
-              label: const Text('다시 선택'),
-            ),
-          ] else ...[
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300, width: 2),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey.shade50,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_a_photo, size: 48, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _pickDocument,
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('촬영'),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: _pickFromGallery,
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('갤러리'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: AppColors.error)),
-          ],
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _loading ? null : _submitDocument,
-            child: _loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('다음', style: TextStyle(fontSize: 16)),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '* 심사에 1~2 영업일이 소요됩니다.\n  승인 전에도 앱 이용이 가능합니다.',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Step 4: Profile Setup ───
+  // ─── Step 2: Profile Setup ───
   Widget _buildProfileSetup() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),

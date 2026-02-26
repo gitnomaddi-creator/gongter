@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -48,6 +49,22 @@ class SupabaseService {
 
   static Future<void> resendOtp({required String email}) {
     return auth.resend(type: OtpType.signup, email: email);
+  }
+
+  static Future<void> resetPassword({required String email}) {
+    return auth.resetPasswordForEmail(email);
+  }
+
+  /// Get blocked users with profiles
+  static Future<List<Map<String, dynamic>>> getBlockedUsers() async {
+    final uid = currentUserId;
+    if (uid == null) return [];
+    final res = await client
+        .from('blocks')
+        .select('blocked_id, created_at, profiles!blocks_blocked_id_fkey(nickname)')
+        .eq('blocker_id', uid)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(res);
   }
 
   // Profile
@@ -114,28 +131,6 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(res)
         .map((e) => e['blocked_id'] as String)
         .toList();
-  }
-
-  /// Upload document to verification-docs bucket
-  static Future<String> uploadVerificationDoc(File file) async {
-    final uid = currentUserId;
-    if (uid == null) throw Exception('Not logged in');
-    final ext = file.path.split('.').last;
-    final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await client.storage.from('verification-docs').upload(path, file);
-    return client.storage.from('verification-docs').getPublicUrl(path);
-  }
-
-  /// Create document verification record
-  static Future<void> createDocumentVerification({
-    required String fileUrl,
-    required String municipalityId,
-  }) async {
-    await client.from('document_verifications').insert({
-      'user_id': currentUserId,
-      'file_url': fileUrl,
-      'municipality_id': municipalityId,
-    });
   }
 
   /// Upload image to post-images bucket
@@ -241,6 +236,26 @@ class SupabaseService {
         .select('*, municipalities(name)')
         .eq('id', postId)
         .maybeSingle();
+    if (res == null) return null;
+    // Fetch like/bookmark status
+    final uid = currentUserId;
+    if (uid != null) {
+      final liked = await client
+          .from('likes')
+          .select('id')
+          .eq('user_id', uid)
+          .eq('target_type', 'post')
+          .eq('target_id', postId)
+          .maybeSingle();
+      final bookmarked = await client
+          .from('bookmarks')
+          .select('id')
+          .eq('user_id', uid)
+          .eq('post_id', postId)
+          .maybeSingle();
+      res['is_liked'] = liked != null;
+      res['is_bookmarked'] = bookmarked != null;
+    }
     return res;
   }
 

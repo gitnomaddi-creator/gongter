@@ -23,13 +23,39 @@ class _HomeScreenState extends State<HomeScreen>
   List<Post> _hotPosts = [];
   bool _loadingLocal = true;
   bool _loadingHot = true;
+  bool _loadingMoreLocal = false;
+  bool _loadingMoreHot = false;
+  bool _hasMoreLocal = true;
+  bool _hasMoreHot = true;
   List<String> _blockedUserIds = [];
+  final _localScrollController = ScrollController();
+  final _hotScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _localScrollController.addListener(_onLocalScroll);
+    _hotScrollController.addListener(_onHotScroll);
     _loadProfile();
+  }
+
+  void _onLocalScroll() {
+    if (_localScrollController.position.pixels >=
+            _localScrollController.position.maxScrollExtent - 200 &&
+        !_loadingMoreLocal &&
+        _hasMoreLocal) {
+      _loadMoreLocal();
+    }
+  }
+
+  void _onHotScroll() {
+    if (_hotScrollController.position.pixels >=
+            _hotScrollController.position.maxScrollExtent - 200 &&
+        !_loadingMoreHot &&
+        _hasMoreHot) {
+      _loadMoreHot();
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -63,7 +89,10 @@ class _HomeScreenState extends State<HomeScreen>
       }
       return;
     }
-    setState(() => _loadingLocal = true);
+    setState(() {
+      _loadingLocal = true;
+      _hasMoreLocal = true;
+    });
     try {
       final data = await SupabaseService.getFeed(
         municipalityId: _municipalityId!,
@@ -110,9 +139,56 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _loadMoreLocal() async {
+    if (_municipalityId == null) return;
+    setState(() => _loadingMoreLocal = true);
+    try {
+      final data = await SupabaseService.getFeed(
+        municipalityId: _municipalityId!,
+        tag: _selectedTag,
+        offset: _localPosts.length,
+      );
+      if (mounted) {
+        final newPosts = data
+            .map((e) => Post.fromJson(e))
+            .where((p) => !_blockedUserIds.contains(p.authorId))
+            .toList();
+        setState(() {
+          _localPosts.addAll(newPosts);
+          _hasMoreLocal = data.length >= 20;
+          _loadingMoreLocal = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingMoreLocal = false);
+    }
+  }
+
+  Future<void> _loadMoreHot() async {
+    setState(() => _loadingMoreHot = true);
+    try {
+      final data = await SupabaseService.getHotPosts(offset: _hotPosts.length);
+      if (mounted) {
+        final newPosts = data
+            .map((e) => Post.fromJson(e))
+            .where((p) => !_blockedUserIds.contains(p.authorId))
+            .toList();
+        setState(() {
+          _hotPosts.addAll(newPosts);
+          _hasMoreHot = data.length >= 20;
+          _loadingMoreHot = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingMoreHot = false);
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
+    _localScrollController.dispose();
+    _hotScrollController.dispose();
     super.dispose();
   }
 
@@ -157,7 +233,13 @@ class _HomeScreenState extends State<HomeScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/write'),
+        onPressed: () async {
+          final result = await context.push<bool>('/write');
+          if (result == true) {
+            _loadLocalFeed();
+            _loadHotFeed();
+          }
+        },
         child: const Icon(Icons.edit),
       ),
     );
@@ -186,8 +268,15 @@ class _HomeScreenState extends State<HomeScreen>
                   : RefreshIndicator(
                       onRefresh: _loadLocalFeed,
                       child: ListView.builder(
-                        itemCount: _localPosts.length,
+                        controller: _localScrollController,
+                        itemCount: _localPosts.length + (_loadingMoreLocal ? 1 : 0),
                         itemBuilder: (context, index) {
+                          if (index == _localPosts.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
                           return PostCard(
                             post: _localPosts[index],
                             onTap: () =>
@@ -209,8 +298,15 @@ class _HomeScreenState extends State<HomeScreen>
             : RefreshIndicator(
                 onRefresh: _loadHotFeed,
                 child: ListView.builder(
-                  itemCount: _hotPosts.length,
+                  controller: _hotScrollController,
+                  itemCount: _hotPosts.length + (_loadingMoreHot ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == _hotPosts.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
                     return PostCard(
                       post: _hotPosts[index],
                       showMunicipality: true,

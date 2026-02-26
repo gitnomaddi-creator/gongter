@@ -5,12 +5,12 @@ import urllib.request
 PROJECT_REF = "lvqgmcrwdkmcgqkwkdlq"
 ACCESS_TOKEN = "sbp_501e19c69823efe532c6fbe6aa27a49c56f58c70"
 
-COMMON_HEADER = '''<tr>
-            <td style="background: linear-gradient(135deg, #E8836B 0%, #D4604A 100%); padding:36px 40px; text-align:center;">
-              <div style="display:inline-block; background-color:rgba(255,255,255,0.18); border-radius:12px; padding:10px 24px;">
-                <span style="font-size:26px; font-weight:800; color:#FFFFFF; letter-spacing:4px;">공터</span>
-              </div>
-              <p style="margin:12px 0 0 0; font-size:13px; color:rgba(255,255,255,0.85); letter-spacing:1px;">지방공무원 익명 커뮤니티</p>
+LOGO_URL = "https://lvqgmcrwdkmcgqkwkdlq.supabase.co/storage/v1/object/public/app-assets/logo.png"
+
+COMMON_HEADER = f'''<tr>
+            <td style="background: linear-gradient(135deg, #E8836B 0%, #D4604A 100%); padding:32px 40px; text-align:center;">
+              <img src="{LOGO_URL}" alt="공터" width="72" height="72" style="display:block; margin:0 auto 12px auto; border-radius:16px;" />
+              <p style="margin:0; font-size:13px; color:rgba(255,255,255,0.85); letter-spacing:1px;">지방공무원 익명 커뮤니티</p>
             </td>
           </tr>'''
 
@@ -22,7 +22,11 @@ COMMON_FOOTER = '''<tr>
           </tr>'''
 
 def wrap_template(body_content):
-    return f'''<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F5F0ED; padding:40px 16px;">
+    return f'''<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0; padding:0; font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F5F0ED; padding:40px 16px;">
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; background-color:#FFFFFF; border-radius:16px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
@@ -32,7 +36,9 @@ def wrap_template(body_content):
         </table>
       </td>
     </tr>
-  </table>'''
+  </table>
+</body>
+</html>'''
 
 # 1. 회원가입 확인
 confirmation = wrap_template('''<tr>

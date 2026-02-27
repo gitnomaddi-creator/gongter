@@ -231,32 +231,11 @@ class SupabaseService {
   }
 
   static Future<Map<String, dynamic>?> getPost(String postId) async {
-    final res = await client
-        .from('posts')
-        .select('*, municipalities(name)')
-        .eq('id', postId)
-        .maybeSingle();
+    final res = await client.rpc('get_post_detail', params: {
+      'p_post_id': postId,
+    });
     if (res == null) return null;
-    // Fetch like/bookmark status
-    final uid = currentUserId;
-    if (uid != null) {
-      final liked = await client
-          .from('likes')
-          .select('id')
-          .eq('user_id', uid)
-          .eq('target_type', 'post')
-          .eq('target_id', postId)
-          .maybeSingle();
-      final bookmarked = await client
-          .from('bookmarks')
-          .select('id')
-          .eq('user_id', uid)
-          .eq('post_id', postId)
-          .maybeSingle();
-      res['is_liked'] = liked != null;
-      res['is_bookmarked'] = bookmarked != null;
-    }
-    return res;
+    return Map<String, dynamic>.from(res as Map);
   }
 
   /// Increment view count. Call once on initial page load only.
@@ -329,45 +308,24 @@ class SupabaseService {
     await client.from('comments').delete().eq('id', commentId);
   }
 
-  // Likes
-  static Future<void> toggleLike({
+  // Likes (RPC: atomic toggle, 1 round-trip)
+  static Future<bool> toggleLike({
     required String targetType,
     required String targetId,
   }) async {
-    final existing = await client
-        .from('likes')
-        .select('id')
-        .eq('user_id', currentUserId ?? '')
-        .eq('target_type', targetType)
-        .eq('target_id', targetId)
-        .maybeSingle();
-    if (existing != null) {
-      await client.from('likes').delete().eq('id', existing['id']);
-    } else {
-      await client.from('likes').insert({
-        'user_id': currentUserId,
-        'target_type': targetType,
-        'target_id': targetId,
-      });
-    }
+    final res = await client.rpc('toggle_like', params: {
+      'p_target_type': targetType,
+      'p_target_id': targetId,
+    });
+    return (res as Map)['liked'] as bool;
   }
 
-  // Bookmarks
-  static Future<void> toggleBookmark(String postId) async {
-    final existing = await client
-        .from('bookmarks')
-        .select('id')
-        .eq('user_id', currentUserId ?? '')
-        .eq('post_id', postId)
-        .maybeSingle();
-    if (existing != null) {
-      await client.from('bookmarks').delete().eq('id', existing['id']);
-    } else {
-      await client.from('bookmarks').insert({
-        'user_id': currentUserId,
-        'post_id': postId,
-      });
-    }
+  // Bookmarks (RPC: atomic toggle, 1 round-trip)
+  static Future<bool> toggleBookmark(String postId) async {
+    final res = await client.rpc('toggle_bookmark', params: {
+      'p_post_id': postId,
+    });
+    return (res as Map)['bookmarked'] as bool;
   }
 
   // Reports
@@ -448,6 +406,36 @@ class SupabaseService {
     await client
         .from('notifications')
         .update({'is_read': true}).eq('id', notificationId);
+  }
+
+  // Nickname validation (banned words + duplicate check)
+  static Future<String?> validateNickname(String nickname) async {
+    final lower = nickname.toLowerCase();
+    final banned = await client
+        .from('banned_words')
+        .select('word')
+        .eq('category', 'other');
+    final words = List<Map<String, dynamic>>.from(banned);
+    if (words.any((w) => lower.contains((w['word'] as String).toLowerCase()))) {
+      return '사용할 수 없는 닉네임입니다';
+    }
+    final existing = await client
+        .from('profiles')
+        .select('id')
+        .eq('nickname', nickname)
+        .neq('id', currentUserId ?? '')
+        .maybeSingle();
+    if (existing != null) {
+      return '이미 사용 중인 닉네임입니다';
+    }
+    return null;
+  }
+
+  // FCM token
+  static Future<void> saveFcmToken(String token) async {
+    final uid = currentUserId;
+    if (uid == null) return;
+    await client.from('profiles').update({'fcm_token': token}).eq('id', uid);
   }
 
   // Account deletion (anonymize)

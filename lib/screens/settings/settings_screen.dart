@@ -1,12 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gongter/models/municipality.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isAdmin = false;
+  String? _currentMunicipalityName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await SupabaseService.getProfile();
+    if (profile != null && mounted) {
+      setState(() {
+        _isAdmin = profile['role'] == 'admin';
+        _currentMunicipalityName =
+            (profile['municipalities'] as Map<String, dynamic>?)?['full_name'] as String?;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,8 +40,18 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('설정')),
       body: ListView(
         children: [
+          if (_isAdmin) ...[
+            const _SectionHeader('관리자'),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('지자체 변경'),
+              subtitle: Text(_currentMunicipalityName ?? ''),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showChangeMunicipality(context),
+            ),
+            const Divider(),
+          ],
           const _SectionHeader('일반'),
-          // Dark mode is handled by system, show info
           const ListTile(
             leading: Icon(Icons.dark_mode),
             title: Text('다크 모드'),
@@ -92,6 +128,13 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  void _showChangeMunicipality(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const _ChangeMunicipalityScreen()),
+    ).then((_) => _loadProfile());
+  }
+
   void _openUrl(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
@@ -148,6 +191,135 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+// ============================================================
+// 지자체 변경 화면 (admin only)
+// ============================================================
+class _ChangeMunicipalityScreen extends StatefulWidget {
+  const _ChangeMunicipalityScreen();
+
+  @override
+  State<_ChangeMunicipalityScreen> createState() => _ChangeMunicipalityScreenState();
+}
+
+class _ChangeMunicipalityScreenState extends State<_ChangeMunicipalityScreen> {
+  List<Municipality> _metros = [];
+  List<Municipality> _basics = [];
+  Municipality? _selectedMetro;
+  Municipality? _selectedBasic;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMetros();
+  }
+
+  Future<void> _loadMetros() async {
+    final data = await SupabaseService.getMunicipalities(level: 1);
+    if (mounted) {
+      setState(() {
+        _metros = data.map((e) => Municipality.fromJson(e)).toList();
+      });
+    }
+  }
+
+  Future<void> _loadBasics(String metroId) async {
+    final data = await SupabaseService.getMunicipalities(level: 2, parentId: metroId);
+    if (mounted) {
+      setState(() {
+        _basics = data.map((e) => Municipality.fromJson(e)).toList();
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    final id = _selectedBasic?.id ?? _selectedMetro?.id;
+    if (id == null) return;
+
+    setState(() => _saving = true);
+    try {
+      await SupabaseService.client.rpc('change_municipality', params: {
+        'p_municipality_id': id,
+      });
+      await SupabaseService.checkProfileComplete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('지자체가 변경되었습니다')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('변경에 실패했습니다')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('지자체 변경')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<Municipality>(
+              initialValue: _selectedMetro,
+              decoration: const InputDecoration(
+                labelText: '시/도',
+                prefixIcon: Icon(Icons.location_city),
+              ),
+              items: _metros
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
+                  .toList(),
+              onChanged: (metro) {
+                setState(() {
+                  _selectedMetro = metro;
+                  _selectedBasic = null;
+                  _basics = [];
+                });
+                if (metro != null) _loadBasics(metro.id);
+              },
+            ),
+            const SizedBox(height: 16),
+            if (_selectedMetro != null && _basics.isNotEmpty)
+              DropdownButtonFormField<Municipality>(
+                initialValue: _selectedBasic,
+                decoration: const InputDecoration(
+                  labelText: '시/군/구',
+                  prefixIcon: Icon(Icons.apartment),
+                ),
+                items: _basics
+                    .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
+                    .toList(),
+                onChanged: (basic) => setState(() => _selectedBasic = basic),
+              ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _saving || _selectedMetro == null ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('변경하기'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 차단 목록 화면
+// ============================================================
 class _BlockedUsersScreen extends StatefulWidget {
   const _BlockedUsersScreen();
 

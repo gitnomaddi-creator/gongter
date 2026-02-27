@@ -1,16 +1,27 @@
 import 'dart:io';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/router.dart';
 import 'package:gongter/services/ad_service.dart';
+import 'package:gongter/services/notification_service.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/utils/constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase init (skip gracefully if config files not yet added)
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('[Firebase] Init skipped: $e');
+  }
 
   await Supabase.initialize(
     url: AppConstants.supabaseUrl,
@@ -19,6 +30,13 @@ void main() async {
 
   // Cache profile completion for sync router redirect
   await SupabaseService.checkProfileComplete();
+
+  // FCM token registration (after Supabase init & auth check)
+  try {
+    await NotificationService.initialize();
+  } catch (e) {
+    debugPrint('[FCM] Init skipped: $e');
+  }
 
   await AdService.initialize();
 

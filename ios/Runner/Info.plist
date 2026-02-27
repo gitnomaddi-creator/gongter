@@ -51,9 +51,9 @@
 		<!-- ATT (App Tracking Transparency) -->
 		<key>NSUserTrackingUsageDescription</key>
 		<string>맞춤형 광고를 제공하기 위해 추적 권한이 필요합니다.</string>
-		<!-- Camera for document verification -->
+		<!-- Camera for post image capture -->
 		<key>NSCameraUsageDescription</key>
-		<string>재직증명서 촬영을 위해 카메라 접근이 필요합니다.</string>
+		<string>게시글에 첨부할 사진을 촬영하기 위해 카메라 접근이 필요합니다.</string>
 		<!-- Photo Library for image upload -->
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>게시글 이미지 첨부를 위해 사진 라이브러리 접근이 필요합니다.</string>

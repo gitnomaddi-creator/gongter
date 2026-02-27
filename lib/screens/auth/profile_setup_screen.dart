@@ -64,6 +64,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() => _error = '닉네임은 ${AppConstants.minNicknameLength}자 이상이어야 합니다');
       return;
     }
+    final nicknameError = await SupabaseService.validateNickname(nickname);
+    if (nicknameError != null) {
+      setState(() => _error = nicknameError);
+      return;
+    }
     final municipalityId =
         _selectedMunicipality?.id ?? _selectedMetro?.id;
     if (municipalityId == null) {

@@ -214,6 +214,11 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _error = '닉네임은 한글, 영문, 숫자만 사용 가능합니다');
       return;
     }
+    final nicknameError = await SupabaseService.validateNickname(nickname);
+    if (nicknameError != null) {
+      setState(() => _error = nicknameError);
+      return;
+    }
 
     final municipalityId =
         _selectedMunicipality?.id ?? _autoDetectedMunicipality?.id;

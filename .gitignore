@@ -1,3 +1,7 @@
+# Firebase Service Account (sensitive)
+firebase-service-account.json
+*.p8
+
 # Miscellaneous
 *.class
 *.log
@@ -52,3 +56,6 @@ android/key.properties
 # Firebase config (contains API keys)
 google-services.json
 GoogleService-Info.plist
+
+# iOS Provisioning Profile
+*.mobileprovision

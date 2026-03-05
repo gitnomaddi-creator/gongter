@@ -4,6 +4,7 @@ import 'package:gongter/models/municipality.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
+import 'package:gongter/utils/email_validator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -85,8 +86,8 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    if (!email.endsWith('.go.kr') && !email.endsWith('.kr')) {
-      setState(() => _error = '공무원 이메일(.kr)만 사용 가능합니다');
+    if (!EmailValidator.isAllowedDomain(email)) {
+      setState(() => _error = '공무원 이메일(korea.kr)만 사용 가능합니다');
       return;
     }
 
@@ -287,8 +288,24 @@ class _SignupScreenState extends State<SignupScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            '공무원 이메일(예: name@korea.kr)을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
+            '공무원 이메일을 입력해주세요.\n이메일로 6자리 인증코드가 발송됩니다.',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              '사용 가능: korea.kr',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           TextField(
@@ -538,7 +555,29 @@ class _SignupScreenState extends State<SignupScreen> {
             '소속 지자체와 닉네임을 설정해주세요',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18, color: AppColors.accent),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '소속 지자체는 한번 선택하면 변경할 수 없습니다.\n변경이 필요한 경우 설정 > 소속 변경 문의를 이용해주세요.',
+                    style: TextStyle(fontSize: 12, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
 
           // Auto-detected municipality
           if (_autoDetectedMunicipality != null) ...[

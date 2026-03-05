@@ -2,19 +2,13 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:io';
 
 class AdService {
-  // Banner test IDs
-  static const _testBannerIdAndroid = 'ca-app-pub-3940256099942544/6300978111';
-  static const _testBannerIdIos = 'ca-app-pub-3940256099942544/2934735716';
-
-  // Interstitial test IDs
-  static const _testInterstitialIdAndroid = 'ca-app-pub-3940256099942544/1033173712';
-  static const _testInterstitialIdIos = 'ca-app-pub-3940256099942544/4411468910';
-
-  // TODO: Replace with real ad unit IDs after AdMob registration
-  static const _bannerIdAndroid = _testBannerIdAndroid;
-  static const _bannerIdIos = _testBannerIdIos;
-  static const _interstitialIdAndroid = _testInterstitialIdAndroid;
-  static const _interstitialIdIos = _testInterstitialIdIos;
+  // Real ad unit IDs
+  static const _bannerIdAndroid = 'ca-app-pub-1441586915486263/6053302524';
+  static const _bannerIdIos = 'ca-app-pub-1441586915486263/6983240819';
+  static const _interstitialIdAndroid = 'ca-app-pub-1441586915486263/6843494228';
+  static const _interstitialIdIos = 'ca-app-pub-1441586915486263/5670159144';
+  static const _nativeIdAndroid = 'ca-app-pub-1441586915486263/5809759944';
+  static const _nativeIdIos = 'ca-app-pub-1441586915486263/7370253627';
 
   static String get bannerAdUnitId {
     if (Platform.isAndroid) return _bannerIdAndroid;
@@ -25,6 +19,12 @@ class AdService {
   static String get interstitialAdUnitId {
     if (Platform.isAndroid) return _interstitialIdAndroid;
     if (Platform.isIOS) return _interstitialIdIos;
+    throw UnsupportedError('Unsupported platform');
+  }
+
+  static String get nativeAdUnitId {
+    if (Platform.isAndroid) return _nativeIdAndroid;
+    if (Platform.isIOS) return _nativeIdIos;
     throw UnsupportedError('Unsupported platform');
   }
 

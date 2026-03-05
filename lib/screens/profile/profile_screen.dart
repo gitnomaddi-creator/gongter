@@ -139,34 +139,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showNicknameDialog() {
     final controller =
         TextEditingController(text: _profile?['nickname'] as String? ?? '');
+    String? dialogError;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('닉네임 변경'),
-        content: TextField(
-          controller: controller,
-          maxLength: 10,
-          decoration: const InputDecoration(
-            hintText: '2~10자 한글/영문/숫자',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('닉네임 변경'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                maxLength: 10,
+                decoration: const InputDecoration(
+                  hintText: '2~10자 한글/영문/숫자',
+                ),
+              ),
+              if (dialogError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(dialogError!,
+                      style: const TextStyle(
+                          color: AppColors.error, fontSize: 13)),
+                ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final nickname = controller.text.trim();
-              if (nickname.length >= 2) {
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final nickname = controller.text.trim();
+                if (nickname.length < 2) {
+                  setDialogState(
+                      () => dialogError = '닉네임은 2자 이상이어야 합니다');
+                  return;
+                }
+                final nicknameRegex = RegExp(r'^[가-힣a-zA-Z0-9]+$');
+                if (!nicknameRegex.hasMatch(nickname)) {
+                  setDialogState(
+                      () => dialogError = '닉네임은 한글, 영문, 숫자만 사용 가능합니다');
+                  return;
+                }
+                final validationError =
+                    await SupabaseService.validateNickname(nickname);
+                if (validationError != null) {
+                  setDialogState(() => dialogError = validationError);
+                  return;
+                }
                 await SupabaseService.updateProfile(nickname: nickname);
                 if (ctx.mounted) Navigator.pop(ctx);
                 _loadProfile();
-              }
-            },
-            child: const Text('저장'),
-          ),
-        ],
+              },
+              child: const Text('저장'),
+            ),
+          ],
+        ),
       ),
     );
   }

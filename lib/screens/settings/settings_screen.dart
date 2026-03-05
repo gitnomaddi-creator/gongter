@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gongter/models/municipality.dart';
+import 'package:gongter/services/notification_service.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
@@ -42,6 +43,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           if (_isAdmin) ...[
             const _SectionHeader('관리자'),
+            ListTile(
+              leading: const Icon(Icons.campaign),
+              title: const Text('공지사항 발송'),
+              subtitle: const Text('전체 사용자에게 공지를 보냅니다'),
+              onTap: () => _showAnnouncementDialog(context),
+            ),
             ListTile(
               leading: const Icon(Icons.swap_horiz),
               title: const Text('지자체 변경'),
@@ -101,9 +108,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           const _SectionHeader('계정'),
           ListTile(
+            leading: const Icon(Icons.swap_horiz),
+            title: const Text('소속 변경 문의'),
+            subtitle: const Text('인사이동 시 소속 변경이 필요하면 문의해주세요'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showTransferInquiry(context),
+          ),
+          ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('로그아웃'),
             onTap: () async {
+              await NotificationService.cleanup();
               await SupabaseService.signOut();
               if (context.mounted) context.go('/login');
             },
@@ -152,6 +167,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAnnouncementDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('공지사항 발송'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: '제목',
+                hintText: '공지사항 제목을 입력하세요',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: bodyController,
+              decoration: const InputDecoration(
+                labelText: '내용',
+                hintText: '공지사항 내용을 입력하세요',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              final body = bodyController.text.trim();
+              if (title.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await SupabaseService.sendAnnouncement(
+                  title: title,
+                  body: body,
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('공지사항이 발송되었습니다')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('발송 실패: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('발송'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTransferInquiry(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('소속 변경 문의'),
+        content: const Text(
+          '소속 변경은 연 1회까지 바로 처리됩니다.\n'
+          '그 이상은 재직증명서 등 확인 서류를 요청드릴 수 있어요.\n\n'
+          '아래 버튼을 누르면 메일 앱이 열립니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final uri = Uri(
+                scheme: 'mailto',
+                path: 'nomad.webapp@gmail.com',
+                query: Uri.encodeFull(
+                  'subject=[공터] 소속 변경 문의&'
+                  'body=현재 소속: (예: 서울특별시 서초구)\n'
+                  '변경 소속: (예: 서울특별시 강남구)\n'
+                  '사유: (예: 인사교류, 전출)\n'
+                  '가입 이메일: ',
+                ),
+              );
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              }
+            },
+            child: const Text('메일 보내기'),
           ),
         ],
       ),

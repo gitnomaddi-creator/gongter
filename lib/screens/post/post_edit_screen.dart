@@ -54,6 +54,19 @@ class _PostEditScreenState extends State<PostEditScreen> {
 
     setState(() => _submitting = true);
     try {
+      // Banned words check
+      final contentError =
+          await SupabaseService.validateContent('$title $content');
+      if (contentError != null) {
+        if (mounted) {
+          setState(() => _submitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(contentError)),
+          );
+        }
+        return;
+      }
+
       await SupabaseService.updatePost(
         postId: widget.postId,
         title: title,

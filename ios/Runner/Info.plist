@@ -45,9 +45,8 @@
 		<true/>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
-		<!-- AdMob App ID (test ID for now, replace before release) -->
 		<key>GADApplicationIdentifier</key>
-		<string>ca-app-pub-3940256099942544~1458002511</string>
+		<string>ca-app-pub-1441586915486263~3803707426</string>
 		<!-- ATT (App Tracking Transparency) -->
 		<key>NSUserTrackingUsageDescription</key>
 		<string>맞춤형 광고를 제공하기 위해 추적 권한이 필요합니다.</string>

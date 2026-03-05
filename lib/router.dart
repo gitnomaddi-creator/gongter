@@ -1,8 +1,10 @@
 import 'package:go_router/go_router.dart';
+import 'package:gongter/main.dart' show onboardingComplete;
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/screens/auth/login_screen.dart';
 import 'package:gongter/screens/auth/signup_screen.dart';
 import 'package:gongter/screens/auth/profile_setup_screen.dart';
+import 'package:gongter/screens/onboarding/onboarding_screen.dart';
 import 'package:gongter/screens/home/home_screen.dart';
 import 'package:gongter/screens/post/post_detail_screen.dart';
 import 'package:gongter/screens/post/post_write_screen.dart';
@@ -19,8 +21,13 @@ import 'package:gongter/widgets/main_shell.dart';
 final appRouter = GoRouter(
   initialLocation: '/',
   redirect: (context, state) {
-    final loggedIn = SupabaseService.isLoggedIn;
     final loc = state.matchedLocation;
+
+    // Onboarding check (first-time users)
+    if (!onboardingComplete && loc != '/onboarding') return '/onboarding';
+    if (onboardingComplete && loc == '/onboarding') return '/login';
+
+    final loggedIn = SupabaseService.isLoggedIn;
     final isAuthRoute =
         loc == '/login' || loc == '/signup' || loc == '/profile-setup';
     if (!loggedIn && !isAuthRoute) return '/login';
@@ -32,6 +39,11 @@ final appRouter = GoRouter(
     return null;
   },
   routes: [
+    // Onboarding
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
+    ),
     // Auth
     GoRoute(
       path: '/login',

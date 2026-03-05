@@ -9,6 +9,28 @@ class SupabaseService {
   static String? get currentUserId => auth.currentUser?.id;
   static bool get isLoggedIn => auth.currentUser != null;
 
+  /// Cached banned words (loaded at startup)
+  static List<String> _bannedWordsAll = [];
+  static List<String> _bannedWordsOther = [];
+
+  /// Load banned words from DB into memory. Call once at startup.
+  static Future<void> loadBannedWords() async {
+    try {
+      final rows = await client
+          .from('banned_words')
+          .select('word, category');
+      final list = List<Map<String, dynamic>>.from(rows);
+      _bannedWordsAll = list.map((w) => (w['word'] as String).toLowerCase()).toList();
+      _bannedWordsOther = list
+          .where((w) => w['category'] == 'other')
+          .map((w) => (w['word'] as String).toLowerCase())
+          .toList();
+    } catch (e) {
+      _bannedWordsAll = [];
+      _bannedWordsOther = [];
+    }
+  }
+
   /// Cached profile completion status (synced at startup & after profile setup)
   static bool _profileComplete = false;
   static bool get profileComplete => _profileComplete;
@@ -305,7 +327,19 @@ class SupabaseService {
   }
 
   static Future<void> deleteComment(String commentId) async {
-    await client.from('comments').delete().eq('id', commentId);
+    await client.rpc('soft_delete_comment', params: {
+      'p_comment_id': commentId,
+    });
+  }
+
+  static Future<void> updateComment({
+    required String commentId,
+    required String content,
+  }) async {
+    await client
+        .from('comments')
+        .update({'content': content})
+        .eq('id', commentId);
   }
 
   // Likes (RPC: atomic toggle, 1 round-trip)
@@ -408,25 +442,46 @@ class SupabaseService {
         .update({'is_read': true}).eq('id', notificationId);
   }
 
-  // Nickname validation (banned words + duplicate check)
+  static Future<int> getUnreadNotificationCount() async {
+    final res = await client
+        .from('notifications')
+        .select('id')
+        .eq('user_id', currentUserId ?? '')
+        .eq('is_read', false);
+    return (res as List).length;
+  }
+
+  static Future<void> sendAnnouncement({
+    required String title,
+    required String body,
+  }) async {
+    final session = auth.currentSession;
+    if (session == null) throw Exception('Not logged in');
+
+    final res = await client.functions.invoke(
+      'send-announcement',
+      body: {'title': title, 'body': body},
+    );
+
+    if (res.status != 200) {
+      throw Exception(res.data?['error'] ?? 'Failed to send announcement');
+    }
+  }
+
+  // Nickname validation (banned words only — duplicates allowed per PRD 3.7)
   static Future<String?> validateNickname(String nickname) async {
     final lower = nickname.toLowerCase();
-    final banned = await client
-        .from('banned_words')
-        .select('word')
-        .eq('category', 'other');
-    final words = List<Map<String, dynamic>>.from(banned);
-    if (words.any((w) => lower.contains((w['word'] as String).toLowerCase()))) {
+    if (_bannedWordsOther.any((w) => lower.contains(w))) {
       return '사용할 수 없는 닉네임입니다';
     }
-    final existing = await client
-        .from('profiles')
-        .select('id')
-        .eq('nickname', nickname)
-        .neq('id', currentUserId ?? '')
-        .maybeSingle();
-    if (existing != null) {
-      return '이미 사용 중인 닉네임입니다';
+    return null;
+  }
+
+  // Content validation (banned words check for posts/comments)
+  static Future<String?> validateContent(String text) async {
+    final lower = text.toLowerCase();
+    if (_bannedWordsAll.any((w) => lower.contains(w))) {
+      return '부적절한 표현이 포함되어 있습니다';
     }
     return null;
   }

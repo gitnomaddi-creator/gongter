@@ -10,10 +10,18 @@ import 'package:gongter/router.dart';
 import 'package:gongter/services/ad_service.dart';
 import 'package:gongter/services/notification_service.dart';
 import 'package:gongter/services/supabase_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gongter/utils/constants.dart';
+
+/// Whether onboarding has been completed (loaded at startup)
+bool onboardingComplete = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load onboarding state
+  final prefs = await SharedPreferences.getInstance();
+  onboardingComplete = prefs.getBool('onboarding_complete') ?? false;
 
   // Firebase init (skip gracefully if config files not yet added)
   try {
@@ -30,6 +38,9 @@ void main() async {
 
   // Cache profile completion for sync router redirect
   await SupabaseService.checkProfileComplete();
+
+  // Load banned words cache
+  await SupabaseService.loadBannedWords();
 
   // FCM token registration (after Supabase init & auth check)
   try {

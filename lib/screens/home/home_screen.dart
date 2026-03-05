@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:gongter/models/post.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/widgets/banner_ad_widget.dart';
+import 'package:gongter/widgets/native_ad_widget.dart';
 import 'package:gongter/widgets/post_card.dart';
 import 'package:gongter/theme/app_theme.dart';
+
+enum _ItemType { post, nativeAd, loading }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -269,18 +272,23 @@ class _HomeScreenState extends State<HomeScreen>
                       onRefresh: _loadLocalFeed,
                       child: ListView.builder(
                         controller: _localScrollController,
-                        itemCount: _localPosts.length + (_loadingMoreLocal ? 1 : 0),
+                        itemCount: _calcItemCount(_localPosts.length, _loadingMoreLocal),
                         itemBuilder: (context, index) {
-                          if (index == _localPosts.length) {
+                          final item = _resolveItem(index, _localPosts, _loadingMoreLocal);
+                          if (item == _ItemType.loading) {
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(child: CircularProgressIndicator()),
                             );
                           }
+                          if (item == _ItemType.nativeAd) {
+                            return const NativeAdWidget();
+                          }
+                          final postIndex = _toPostIndex(index);
                           return PostCard(
-                            post: _localPosts[index],
+                            post: _localPosts[postIndex],
                             onTap: () =>
-                                context.push('/post/${_localPosts[index].id}'),
+                                context.push('/post/${_localPosts[postIndex].id}'),
                           );
                         },
                       ),
@@ -299,19 +307,24 @@ class _HomeScreenState extends State<HomeScreen>
                 onRefresh: _loadHotFeed,
                 child: ListView.builder(
                   controller: _hotScrollController,
-                  itemCount: _hotPosts.length + (_loadingMoreHot ? 1 : 0),
+                  itemCount: _calcItemCount(_hotPosts.length, _loadingMoreHot),
                   itemBuilder: (context, index) {
-                    if (index == _hotPosts.length) {
+                    final item = _resolveItem(index, _hotPosts, _loadingMoreHot);
+                    if (item == _ItemType.loading) {
                       return const Padding(
                         padding: EdgeInsets.all(16),
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
+                    if (item == _ItemType.nativeAd) {
+                      return const NativeAdWidget();
+                    }
+                    final postIndex = _toPostIndex(index);
                     return PostCard(
-                      post: _hotPosts[index],
+                      post: _hotPosts[postIndex],
                       showMunicipality: true,
                       onTap: () =>
-                          context.push('/post/${_hotPosts[index].id}'),
+                          context.push('/post/${_hotPosts[postIndex].id}'),
                     );
                   },
                 ),
@@ -355,6 +368,28 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
+  }
+
+  // Native ad insertion: 1 ad per 10 posts (at index 10, 21, 32, ...)
+  static const _adInterval = 10;
+
+  int _calcItemCount(int postCount, bool loadingMore) {
+    final adCount = postCount > 0 ? (postCount ~/ _adInterval) : 0;
+    return postCount + adCount + (loadingMore ? 1 : 0);
+  }
+
+  int _toPostIndex(int listIndex) {
+    return listIndex - (listIndex ~/ (_adInterval + 1));
+  }
+
+  _ItemType _resolveItem(int index, List<Post> posts, bool loadingMore) {
+    final totalPosts = posts.length;
+    final adCount = totalPosts > 0 ? (totalPosts ~/ _adInterval) : 0;
+    final totalItems = totalPosts + adCount;
+
+    if (loadingMore && index == totalItems) return _ItemType.loading;
+    if (index > 0 && (index + 1) % (_adInterval + 1) == 0) return _ItemType.nativeAd;
+    return _ItemType.post;
   }
 
   Widget _buildEmptyState() {

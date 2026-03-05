@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gongter/models/post.dart';
 import 'package:gongter/models/comment.dart';
+import 'package:gongter/services/ad_service.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/widgets/banner_ad_widget.dart';
 import 'package:gongter/theme/app_theme.dart';
@@ -81,6 +82,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
     try {
+      // Banned words check
+      final contentError = await SupabaseService.validateContent(content);
+      if (contentError != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(contentError)),
+          );
+        }
+        return;
+      }
+
       await SupabaseService.createComment(
         postId: widget.postId,
         content: content,
@@ -223,7 +235,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) AdService.showInterstitial();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('게시글'),
         actions: [
@@ -454,6 +470,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                   ],
                 ),
+    ),
     );
   }
 
@@ -503,6 +520,71 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } catch (_) {}
   }
 
+  void _showEditCommentDialog(Comment comment) {
+    final controller = TextEditingController(text: comment.content);
+    String? dialogError;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('댓글 수정'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: '댓글 내용을 수정하세요',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (dialogError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(dialogError!,
+                      style: const TextStyle(
+                          color: AppColors.error, fontSize: 13)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final content = controller.text.trim();
+                if (content.isEmpty) {
+                  setDialogState(() => dialogError = '내용을 입력하세요');
+                  return;
+                }
+                final contentError =
+                    await SupabaseService.validateContent(content);
+                if (contentError != null) {
+                  setDialogState(() => dialogError = contentError);
+                  return;
+                }
+                try {
+                  await SupabaseService.updateComment(
+                    commentId: comment.id,
+                    content: content,
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _loadComments();
+                } catch (e) {
+                  setDialogState(() => dialogError = '수정에 실패했습니다');
+                }
+              },
+              child: const Text('저장'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteComment(String commentId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -530,6 +612,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   /// Get anonymous number for a comment author within this post
   String _getAnonLabel(Comment comment) {
+    if (comment.authorId == null) return '탈퇴한 사용자';
     if (comment.isAuthor) return '글쓴이';
     if (comment.authorId == SupabaseService.currentUserId) return '나';
     // Build unique author list in order of first appearance
@@ -542,7 +625,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         authorOrder.add(c.authorId!);
       }
     }
-    final idx = authorOrder.indexOf(comment.authorId ?? '');
+    final idx = authorOrder.indexOf(comment.authorId!);
     return '익명${idx + 1}';
   }
 
@@ -592,6 +675,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 ),
               ],
               const Spacer(),
+              if (comment.isEdited && !isDeleted)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Text(
+                    '수정됨',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ),
               Text(
                 timeago.format(comment.createdAt, locale: 'ko'),
                 style: const TextStyle(
@@ -636,6 +728,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ),
                 ),
                 if (isMyComment) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _showEditCommentDialog(comment),
+                    icon: const Icon(Icons.edit_outlined, size: 14),
+                    label: const Text('수정', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 30),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: () => _deleteComment(comment.id),

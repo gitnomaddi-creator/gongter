@@ -103,6 +103,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Icons.favorite_outline;
       case 'report_result':
         return Icons.gavel;
+      case 'system':
+        return Icons.campaign;
       default:
         return Icons.notifications;
     }

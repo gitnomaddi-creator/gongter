@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:gongter/models/post.dart';
-import 'package:gongter/services/ad_service.dart';
 import 'package:gongter/services/supabase_service.dart';
 import 'package:gongter/theme/app_theme.dart';
 import 'package:gongter/utils/constants.dart';
@@ -35,7 +34,18 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
       imageQuality: 85,
     );
     if (picked != null) {
-      setState(() => _images.add(File(picked.path)));
+      final file = File(picked.path);
+      final sizeInBytes = await file.length();
+      final sizeInMb = sizeInBytes / (1024 * 1024);
+      if (sizeInMb > AppConstants.maxImageSizeMb) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이미지 크기는 5MB 이하만 가능합니다')),
+          );
+        }
+        return;
+      }
+      setState(() => _images.add(file));
     }
   }
 
@@ -58,6 +68,19 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
 
     setState(() => _submitting = true);
     try {
+      // Banned words check (before image upload)
+      final contentError =
+          await SupabaseService.validateContent('$title $content');
+      if (contentError != null) {
+        if (mounted) {
+          setState(() => _submitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(contentError)),
+          );
+        }
+        return;
+      }
+
       final profile = await SupabaseService.getProfile();
       final municipalityId = profile?['municipality_id'] as String?;
       if (municipalityId == null) {
@@ -97,8 +120,6 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
         content: content,
         imageUrls: imageUrls.isNotEmpty ? imageUrls : null,
       );
-      // Show interstitial after post creation (non-blocking)
-      AdService.showInterstitial();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
